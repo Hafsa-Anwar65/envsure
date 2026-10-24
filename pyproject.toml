@@ -10,7 +10,7 @@ readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "Hafsa Anwar" }]
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 dependencies = []
 keywords = ["dotenv", "env", "environment-variables", "config", "validation", "secrets", "pre-commit", "ci"]
 classifiers = [
@@ -43,4 +43,4 @@ pythonpath = ["src"]
 
 [tool.ruff]
 line-length = 130
-target-version = "py39"
+target-version = "py310"
