@@ -1,0 +1,12 @@
+- id: envsure-scan
+  name: envsure — block leaked secrets
+  entry: envsure scan
+  language: python
+  types: [text]
+
+- id: envsure-sync
+  name: envsure — .env.example is up to date
+  entry: envsure sync --check
+  language: python
+  pass_filenames: false
+  always_run: true
