@@ -1,201 +1,275 @@
 <div align="center">
 
-<img src="https://capsule-render.vercel.app/api?type=rect&color=0:2B2A28,100:57534E&height=150&text=LLM%20Cost%20Monitor&fontSize=44&fontColor=F5F1EA&fontAlignY=45&desc=Cost%20and%20latency%20observability%20for%20LLM%20applications&descSize=16&descAlignY=72&descColor=D6CFC4" width="100%" alt="LLM Cost Monitor"/>
+# 🛡️ envsure
 
-<br/>
+**Catch broken config and leaked API keys before they break your app or reach GitHub.**
 
-<img src="https://img.shields.io/badge/status-active-8A9A82?style=flat-square&labelColor=2B2A28" alt="Status"/>
-<img src="https://img.shields.io/badge/license-MIT-A8A29E?style=flat-square&labelColor=2B2A28" alt="License"/>
-<img src="https://img.shields.io/badge/PRs-welcome-C2A878?style=flat-square&labelColor=2B2A28" alt="PRs welcome"/>
-<img src="https://img.shields.io/badge/Hacktoberfest-2026-57534E?style=flat-square&labelColor=2B2A28" alt="Hacktoberfest"/>
+[![CI](https://github.com/Hafsa-Anwar65/envsure/actions/workflows/ci.yml/badge.svg)](https://github.com/Hafsa-Anwar65/envsure/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/Hafsa-Anwar65/envsure)](https://github.com/Hafsa-Anwar65/envsure/releases)
+![Python](https://img.shields.io/badge/python-3.10%2B-blue)
+![Dependencies](https://img.shields.io/badge/dependencies-zero-brightgreen)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-<p>
-<a href="#overview">Overview</a> &nbsp;·&nbsp;
-<a href="#interface">Interface</a> &nbsp;·&nbsp;
-<a href="#how-it-works">How it works</a> &nbsp;·&nbsp;
-<a href="#getting-started">Getting started</a> &nbsp;·&nbsp;
-<a href="#roadmap">Roadmap</a> &nbsp;·&nbsp;
-<a href="#contributing">Contributing</a>
-</p>
+[Quick start](#-quick-start) · [Commands](#-commands) · [Python API](#-python-api) · [CI & pre-commit](#-use-it-in-ci-and-pre-commit) · [Docker](#-docker)
 
 </div>
 
 ---
 
-## Overview
+## What is envsure?
 
-LLM costs are easy to lose track of. Prompts get longer, models get swapped, and retries run in the background. Usually nobody notices until the invoice arrives.
+Almost every project keeps its settings — database URLs, API keys, ports — in a `.env` file, with a `.env.example` committed to the repo so teammates know what to fill in.
 
-**LLM Cost Monitor** is a lightweight logging proxy that sits between your application and the model provider. It records the token usage, cost and latency of every request, and a dashboard turns those records into numbers you can act on.
+That setup breaks in three predictable ways:
 
-| | |
-|:--|:--|
-| **What it is** | A drop-in proxy plus a dashboard |
-| **Who it is for** | Developers and teams running LLM features in production or prototypes |
-| **What you change** | One line: your client's base URL |
-| **What you get** | Per-request cost, latency, and token usage, aggregated by model and over time |
+| Problem | What happens | envsure fixes it with |
+|---|---|---|
+| **Missing or wrong values** | A teammate pulls your branch and the app crashes on startup because `DATABASE_URL` isn't set, or `PORT=abc`. | `envsure check` |
+| **Outdated `.env.example`** | You add a new key to `.env` and forget the example. Nobody trusts the example any more. | `envsure sync` |
+| **Leaked secrets** | A real `sk-...` key gets pasted into `.env.example` or a config file and pushed to GitHub. | `envsure scan` |
 
----
+envsure is a small command-line tool and Python library that handles all three. It has **zero dependencies**, runs in under a second, and works the same on your laptop, in pre-commit and in CI.
 
-## Interface
-
-<p align="center">
-  <img src="docs/dashboard.svg" width="100%" alt="LLM Cost Monitor dashboard"/>
-</p>
-<p align="center"><sub>Dashboard overview (illustrative sample data)</sub></p>
-
-The dashboard has three areas:
-
-| Area | What it shows |
-|:--|:--|
-| **Summary cards** | Total spend, request count, average and p95 latency, and tokens processed for the selected period |
-| **Spend over time / Cost by model** | Daily cost trend, plus which models drive the bill |
-| **Recent requests** | A live log with model, input and output tokens, cost, latency and HTTP status for each call |
-
----
-
-## How it works
-
-<p align="center">
-  <img src="docs/how-it-works.svg" width="100%" alt="Request flow through the proxy"/>
-</p>
-
-1. **Request:** your application sends a normal chat or completion request to the proxy instead of the provider.
-2. **Forward:** the proxy starts a timer and forwards the request unchanged.
-3. **Completion:** the provider responds with the output and its token usage.
-4. **Log:** the proxy calculates cost from the model's price table and writes one record to the usage log.
-5. **Response:** the original response is returned to your application, untouched.
-6. **Visualise:** the dashboard reads the usage log and aggregates it.
-
-### What gets recorded
-
-| Field | Description |
-|:--|:--|
-| `timestamp` | When the request was made |
-| `model` | Model name reported by the provider |
-| `input_tokens` / `output_tokens` | Token counts from the provider's usage field |
-| `cost_usd` | Calculated from the model's per-token pricing |
-| `latency_ms` | Time from request sent to response received |
-| `status` | HTTP status code of the provider response |
-
----
-
-## Features
-
-| Feature | Description |
-|:--|:--|
-| **Cost tracking** | Per-request and aggregate cost, broken down by day and by model |
-| **Latency monitoring** | Average and p95 latency to spot slow models or prompts |
-| **Token accounting** | Separate input and output token totals |
-| **Drop-in proxy** | No SDK changes and no code rewrites; only the base URL changes |
-| **Request history** | A searchable log of every call, including failures such as rate limits |
-| **Local first** | Runs on your machine with lightweight local storage |
-
----
-
-## Getting started
-
-### Prerequisites
-
-- Python 3.10 or newer
-- An API key for at least one LLM provider
-
-### Installation
-
-```bash
-git clone https://github.com/Hafsa-Anwar65/<REPO-NAME>.git
-cd <REPO-NAME>
-pip install -r requirements.txt
-cp .env.example .env
+```mermaid
+flowchart LR
+    A[".env<br/>(your real values)"] -->|envsure check| C{"Valid?"}
+    B[".env.example<br/>(schema, committed)"] -->|defines rules| C
+    C -->|yes| D["✔ App starts"]
+    C -->|no| E["✘ Clear list of every problem"]
+    A -->|envsure sync| B
+    F["Your code & config"] -->|envsure scan| G["🔑 Leaked keys flagged, masked"]
 ```
 
-### Configuration
+---
 
-| Variable | Required | Description |
-|:--|:--:|:--|
-| `OPENAI_API_KEY` | Yes | Provider API key forwarded with requests |
-| `PROXY_PORT` | No | Port the proxy listens on (default `8000`) |
-| `DB_PATH` | No | Location of the usage log database |
+## ⚡ Quick start
 
-### Run
+**1. Install**
 
 ```bash
-<YOUR-RUN-COMMAND>
+pip install git+https://github.com/Hafsa-Anwar65/envsure.git
 ```
 
-### Connect your application
+**2. Add rules to your existing `.env.example`** — just put a `[type]` at the start of the comment. Everything else stays a normal `.env.example`.
 
-Point your existing client at the proxy. Nothing else changes.
+```bash
+PORT=8000            # [port] port the API listens on
+DEBUG=false          # [bool, optional]
+DATABASE_URL=        # [url] postgres connection string
+OPENAI_API_KEY=      # get one at platform.openai.com
+```
+
+**3. Run it**
+
+```console
+$ envsure check
+ERROR   invalid   PORT: must be a port between 1 and 65535 (got '99999')
+ERROR   missing   DATABASE_URL: not set — postgres connection string
+ERROR   empty     OPENAI_API_KEY: is empty — get one at platform.openai.com
+WARNING extra     STRIPE_KEY: not documented in .env.example
+✘ 4 keys checked, 3 error(s), 1 warning(s)
+```
+
+Every problem is listed at once, with the description you wrote, so the person fixing it knows exactly what to do.
+
+---
+
+## 🧰 Commands
+
+### `envsure check` — validate your environment
+
+Compares `.env` (or the real process environment) against the rules in `.env.example`.
+
+**Supported rules**
+
+| Rule | Accepts |
+|---|---|
+| `str` *(default)* | any text |
+| `int`, `float` | numbers |
+| `bool` | `true/false`, `1/0`, `yes/no`, `on/off` |
+| `port` | integer from 1 to 65535 |
+| `url` | `https://…`, `postgres://…`, `redis://…`, `sqlite:///…` |
+| `email` | email address |
+| `json` | valid JSON, e.g. `{"new_ui": true}` |
+| `choice=a\|b\|c` | one of the listed values |
+| `optional` | may be left out — falls back to the value in `.env.example` |
+
+Keys without a rule are treated as **required text**. Rules combine with commas: `# [int, optional]`.
+
+**Options**
+
+| Flag | Purpose |
+|---|---|
+| `--strict` | treat keys missing from `.env.example` as errors |
+| `--environ` | also read the process environment |
+| `--no-file` | read **only** the process environment (CI, Docker, Kubernetes) |
+| `--json` | machine-readable output |
+| `--env PATH`, `--example PATH` | use different file names |
+
+Exit codes: `0` all good · `1` problems found · `2` invalid input (e.g. a typo in a rule).
+
+### `envsure sync` — keep `.env.example` up to date
+
+Copies keys that exist in `.env` but not in `.env.example`, **with values removed** and the type guessed for you.
+
+```console
+$ envsure sync
+Added to .env.example (values blanked): REDIS_URL, WORKERS
+```
+
+```bash
+# appended to .env.example
+REDIS_URL=  # [url]
+WORKERS=  # [int]
+```
+
+Existing lines are never rewritten or reordered.
+
+- `--prune` — also remove keys you deleted from `.env`
+- `--check` — change nothing; exit with `1` if the example is out of date
+
+### `envsure scan` — find leaked secrets
+
+Scans files or whole folders for real-looking credentials.
+
+```console
+$ envsure scan .
+config/settings.py:12  OpenAI API key  sk-p************a1B2
+docker-compose.yml:8   Password in URL  S3cr************Pw99
+✘ 2 possible secret(s) found.
+```
+
+**Detects:** OpenAI · Anthropic · GitHub · AWS · Google · Slack · Stripe · Hugging Face · Groq · JWTs · private keys · passwords inside connection URLs.
+
+- Secrets are **always masked** in output, so logs stay safe.
+- Placeholders such as `sk-your-key-here`, `xxxx`, `<token>` or `${DB_PASSWORD}` are ignored.
+- Add `envsure: ignore` to a line to silence a false positive.
+- Skips `.git`, `node_modules`, virtual environments and binary files.
+
+`envsure check` also scans `.env.example` automatically, so a real key can never sit in your example file unnoticed.
+
+---
+
+## 🐍 Python API
+
+Validate and load settings at app startup — and get real Python types back instead of strings.
 
 ```python
-from openai import OpenAI
+from envsure import load
 
-client = OpenAI(
-    base_url="http://localhost:8000/v1",
-    api_key="your-api-key",
-)
+cfg = load()               # reads .env, validates against .env.example
 
-response = client.chat.completions.create(
-    model="gpt-4o-mini",
-    messages=[{"role": "user", "content": "Hello"}],
-)
+cfg.PORT                   # 8000          (int)
+cfg.DEBUG                  # False         (bool)
+cfg.FEATURE_FLAGS          # {'new_ui': True}  (dict, from json)
+cfg["DATABASE_URL"]        # 'postgres://…' (str)
 ```
 
-Open the dashboard at `http://localhost:<DASHBOARD-PORT>` to see the request appear.
+If anything is wrong, `load()` raises `envsure.EnvsureError` listing **every** problem — not just the first one.
+
+| Behaviour | Default | Change it with |
+|---|---|---|
+| Real environment variables override `.env` | on | `load(environ_wins=False)` |
+| Values from `.env` are copied into `os.environ` | on | `load(export=False)` |
+| File locations | `.env`, `.env.example` | `load(example=..., env=...)` |
+
+You can also call `check()`, `sync()` and `scan_paths()` directly — they return structured results instead of printing.
 
 ---
 
-## Tech stack
+## 🔁 Use it in CI and pre-commit
 
-<p>
-<img src="https://img.shields.io/badge/Python-57534E?style=flat-square&logo=python&logoColor=F5F1EA" alt="Python"/>
-<img src="https://img.shields.io/badge/FastAPI-8A9A82?style=flat-square&logo=fastapi&logoColor=F5F1EA" alt="FastAPI"/>
-<img src="https://img.shields.io/badge/SQLite-A8A29E?style=flat-square&logo=sqlite&logoColor=2B2A28" alt="SQLite"/>
-<img src="https://img.shields.io/badge/Chart.js-C2A878?style=flat-square&logo=chartdotjs&logoColor=2B2A28" alt="Chart.js"/>
-</p>
+### pre-commit
+
+Block secrets and stale examples before a commit is even made:
+
+```yaml
+# .pre-commit-config.yaml
+repos:
+  - repo: https://github.com/Hafsa-Anwar65/envsure
+    rev: v0.1.0
+    hooks:
+      - id: envsure-scan    # stop commits that contain secrets
+      - id: envsure-sync    # stop commits when .env.example is missing keys
+```
+
+### GitHub Actions
+
+```yaml
+steps:
+  - uses: actions/checkout@v4
+
+  # Fail the build if any secret is committed
+  - uses: Hafsa-Anwar65/envsure@v0.1.0
+    with:
+      command: scan
+
+  # Fail the build if required config is missing in CI
+  - uses: Hafsa-Anwar65/envsure@v0.1.0
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+    with:
+      command: check
+      args: --strict
+```
 
 ---
 
-## Roadmap
+## 🐳 Docker
 
-- [x] Logging proxy with token and latency capture
-- [x] Per-request cost calculation
-- [x] Dashboard with spend, model and latency views
-- [ ] Additional providers: Anthropic, Gemini, Groq, local models
-- [ ] Budget thresholds with alerts
-- [ ] Cost breakdown per project and per API key
-- [ ] CSV export of usage logs
-- [ ] Docker image for one-command setup
+No Python needed — run the published image from GitHub Packages:
+
+```bash
+docker run --rm -v "$PWD:/work" ghcr.io/hafsa-anwar65/envsure check
+docker run --rm -v "$PWD:/work" ghcr.io/hafsa-anwar65/envsure scan .
+```
 
 ---
 
-## Contributing
+## How it compares
 
-Contributions are welcome, and this repository takes part in **Hacktoberfest**.
+envsure is intentionally small and focused. It works well **alongside** these tools:
 
-1. Fork the repository and create a branch: `git checkout -b feature/short-description`
-2. Keep each pull request focused on a single change
-3. Write a clear commit message, for example `Add pricing for gemini-1.5-pro`
-4. Open a pull request that explains what changed and why
+| Tool | Loads `.env` | Validates types | Syncs `.env.example` | Scans for secrets |
+|---|:---:|:---:|:---:|:---:|
+| python-dotenv | ✅ | — | — | — |
+| pydantic-settings | ✅ | ✅ (in Python code) | — | — |
+| gitleaks / trufflehog | — | — | — | ✅ (deep, full history) |
+| **envsure** | ✅ | ✅ (in `.env.example`) | ✅ | ✅ (fast, working tree) |
 
-> [!NOTE]
-> New to the project? Issues labelled `good first issue` are a good place to start. Adding a model to the pricing table is a small, self-contained first contribution.
+The difference: envsure keeps the rules **in `.env.example` itself**, so the file every developer already reads becomes the single source of truth — for any language, not just Python.
 
 ---
 
-## License
+## 🛠️ Development
 
-Distributed under the MIT License. See [`LICENSE`](LICENSE) for details.
+```bash
+git clone https://github.com/Hafsa-Anwar65/envsure && cd envsure
+pip install -e ".[dev]"
+pytest            # run the test suite
+ruff check src tests
+```
+
+```
+src/envsure/
+├── parser.py    # .env parser — quotes, comments, export, line numbers
+├── schema.py    # [type] rules and value conversion
+├── core.py      # check(), sync(), load()
+├── secrets.py   # secret patterns and file scanning
+└── cli.py       # command-line interface
+```
+
+**Releasing:** push a version tag (`git tag v0.2.0 && git push origin v0.2.0`). GitHub Actions builds the wheel, attaches it to a GitHub release and publishes the Docker image to `ghcr.io/hafsa-anwar65/envsure`.
+
+Issues and pull requests are welcome.
 
 ---
 
 <div align="center">
 
-**Hafsa Anwar** · AI & Automation Engineer
+**MIT License** © 2026 [Hafsa Anwar](https://github.com/Hafsa-Anwar65)
 
-<a href="https://www.linkedin.com/in/hafsa-anwar-53b251313"><img src="https://img.shields.io/badge/LinkedIn-57534E?style=flat-square&logo=linkedin&logoColor=F5F1EA" alt="LinkedIn"/></a>
-<a href="https://github.com/Hafsa-Anwar65"><img src="https://img.shields.io/badge/GitHub-2B2A28?style=flat-square&logo=github&logoColor=F5F1EA" alt="GitHub"/></a>
-
-<sub>If this project is useful to you, consider giving it a star.</sub>
+If envsure saved you from a broken deploy or a leaked key, consider giving it a ⭐
 
 </div>
